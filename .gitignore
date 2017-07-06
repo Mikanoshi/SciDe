@@ -1,0 +1,7 @@
+*.identcache
+*.stat
+*.rsm
+*.drc
+*.dproj.local
+*.groupproj.local
+*.mes
