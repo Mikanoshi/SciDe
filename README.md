@@ -1,5 +1,5 @@
 # SciDe
-[Sciter](http://sciter.com/) bindings for Delphi
+[Sciter](https://sciter.com/) bindings for Delphi
 
 ## Supported versions
 Delphi 7 or newer, 32 and 64-bit platforms

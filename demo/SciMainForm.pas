@@ -174,9 +174,9 @@ begin
   Sciter1.RegisterComObject('Test', pTest);
 
   // Registering another external OLE
-  pXml := CreateOleObject('MSXML2.DOMDocument');
-  pXml.LoadXML('<xml><item>Foo</item><item>Bar</item></xml>');
-  Sciter1.RegisterComObject('XML', pXml);
+//  pXml := CreateOleObject('MSXML2.DOMDocument');
+//  pXml.LoadXML('<xml><item>Foo</item><item>Bar</item></xml>');
+//  Sciter1.RegisterComObject('XML', pXml);
 
   Sciter1.Println('Hello', []);
 end;
@@ -508,7 +508,7 @@ begin
   begin
     ShowMessage('Method ' + Args.Method + ' is being called');
     Args.Handled := True;
-    Args.ReturnValue := 100;
+    Args.ReturnVariantValue := 100;
   end;
   // else Handled = False and Sciter will emit a warning message
 end;

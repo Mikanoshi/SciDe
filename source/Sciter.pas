@@ -1449,13 +1449,13 @@ begin
 end;
 
 procedure TSciter.DestroyWnd;
-//var
-//  pbHandled: BOOL;
+var
+  pbHandled: BOOL;
 begin
   API.SciterSetCallback(Handle, nil, nil);
-  API.SciterWindowAttachEventHandler(Handle, nil, nil, UINT(HANDLE_ALL));
+  API.SciterWindowDetachEventHandler(Handle, LPELEMENT_EVENT_PROC(@_SciterViewEventProc), Self);
   API.SciterSetupDebugOutput(Handle, nil, nil);
-//  API.SciterProcND(Handle, WM_DESTROY, 0, 0, pbHandled);
+  API.SciterProcND(Handle, WM_DESTROY, 0, 0, pbHandled);
   inherited;
 end;
 
@@ -2495,6 +2495,7 @@ destructor TElement.Destroy;
 begin
   API.SciterDetachEventHandler(Self.FElement, LPELEMENT_EVENT_PROC(@_SciterElementEventProc), Self);
   API.Sciter_UnuseElement(FElement);
+  if Assigned(FSciter.ManagedElements) then
   if FSciter.ManagedElements.IndexOf(Self) <> - 1 then
     FSciter.ManagedElements.Remove(Self);
   inherited;
