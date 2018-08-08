@@ -3,6 +3,7 @@
 
 ## Supported versions
 Delphi 2009 or newer, 32 and 64-bit platforms
+
 Sciter 4.2.3
 
 ## Installation
