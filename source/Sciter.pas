@@ -957,6 +957,7 @@ var
   pArgs: TSciterOnMessageEventArgs;
 begin
   FSciter := TSciter(param);
+  if Assigned(text) then OutputDebugString(PChar(Trim(text)));
   if Assigned(FSciter.FOnMessage) then
   begin
     pArgs := TSciterOnMessageEventArgs.Create;
@@ -975,7 +976,7 @@ begin
   end
     else
   begin
-    if ( SR = SCDOM_OK_NOT_HANDLED) and (AllowNotHandled) then
+    if (SR = SCDOM_OK_NOT_HANDLED) and (AllowNotHandled) then
     begin
       Result := SR;
       Exit;

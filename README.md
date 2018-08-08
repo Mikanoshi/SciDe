@@ -2,9 +2,8 @@
 [Sciter](https://sciter.com/) bindings for Delphi
 
 ## Supported versions
-Delphi 7 or newer, 32 and 64-bit platforms
-
-Sciter 4.0.1.1
+Delphi 2009 or newer, 32 and 64-bit platforms
+Sciter 4.2.3
 
 ## Installation
 * Open project group file (.bpg or .groupproj) in Delphi IDE
