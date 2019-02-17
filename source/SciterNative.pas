@@ -518,7 +518,7 @@ end;
 
 function TSciterClassInfo.GetSetItemHandler: tiscript_set_item;
 begin
-  Result := SetItemHandler;
+  Result := FSetItemHandler;
 end;
 
 function TSciterClassInfo.GetSetterHandler: tiscript_tagged_set_prop;

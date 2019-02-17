@@ -58,7 +58,36 @@ type
     SCDOM_DUMMY             = MAXINT
   );
 
+  REQUEST_RESULT =
+  (
+    REQUEST_OK               = 0,
+    REQUEST_BAD_PARAM        = 1, // bad parameter
+    REQUEST_FAILURE          = 2, // operation failed, e.g. index out of bounds
+    REQUEST_NOTSUPPORTED     = 3, // the platform does not support requested feature
+    REQUEST_PANIC            = -1 // e.g. not enough memory
+  );
+
+  REQUEST_RQ_TYPE =
+  (
+    RRT_GET                  = 1,
+    RRT_POST                 = 2,
+    RRT_PUT                  = 3,
+    RRT_DELETE               = 4,
+    RRT_FORCE_DWORD          = $FFFFFFFF
+  );
+
+  PREQUEST_STATE = ^REQUEST_STATE;
+  REQUEST_STATE =
+  (
+    RS_PENDING               = 0,
+    RS_SUCCESS               = 1, // completed successfully
+    RS_FAILURE               = 2, // completed with failure
+    RS_FORCE_DWORD           = $FFFFFFFF
+  );
+
   HWINDOW = HWND;
+
+  HREQUEST = Pointer;
 
   HELEMENT = Pointer;
 
@@ -67,7 +96,6 @@ type
   LPVOID   = Pointer;
 
   UINT_PTR = UINT;
-
 
   LPCSTR_RECEIVER = procedure(str: PAnsiChar; str_length: UINT; param: Pointer); stdcall;
   PLPCSTR_RECEIVER = ^LPCSTR_RECEIVER;
@@ -92,6 +120,7 @@ type
   LPELEMENT_EVENT_PROC = ^ElementEventProc;
 
 
+  PSciterResourceType = ^SciterResourceType;
   SciterResourceType { NB: UINT }  =
   (
     RT_DATA_HTML   = 0,
@@ -113,6 +142,14 @@ type
     GFX_LAYER_SKIA = 4,
     GFX_LAYER_SKIA_OPENGL = 5,
     GFX_LAYER_AUTO = $FFFF
+  );
+
+  SciterRuntimeFeatures =
+  (
+    ALLOW_FILE_IO = 1,
+    ALLOW_SOCKET_IO = 2,
+    ALLOW_EVAL = 4,
+    ALLOW_SYSINFO = 8
   );
 
   SCITER_RT_OPTIONS { NB: UINT_PTR } = (
@@ -193,10 +230,8 @@ type
   DEBUG_OUTPUT_PROC = procedure(param: Pointer; subsystem: UINT; severity: UINT; text: PWideChar; text_length: UINT); stdcall;
   PDEBUG_OUTPUT_PROC = ^DEBUG_OUTPUT_PROC;
 
-
   SciterElementCallback = function(he: HELEMENT; Param: Pointer): BOOL; stdcall;
   PSciterElementCallback = ^SciterElementCallback;
-
 
   VALUE_STRING_CVT_TYPE =
   (
@@ -206,7 +241,6 @@ type
     CVT_XJSON_LITERAL,
     VALUE_STRING_CVT_TYPE_DUMMY = MAXINT
   );
-
 
   TSciterValueType =
   (
@@ -291,7 +325,6 @@ type
     EVENT_GROUPS_DUMMY           = MAXINT
   );
 
-
   ELEMENT_STATE_BITS =
   (
     STATE_LINK             = $00000001,
@@ -327,7 +360,6 @@ type
     ELEMENT_STATE_BITS_DUMMY = MAXINT
   );
 
-
   ELEMENT_AREAS =
   (
     ROOT_RELATIVE      = $1,
@@ -343,7 +375,6 @@ type
     SCROLLABLE_AREA    = $60,
     ELEMENT_AREAS_DUMMY = MAXINT
   );
-
 
   TSciterValue = record
     t: UINT;
@@ -443,7 +474,6 @@ type
     value: PWideChar;
   end;
   PREQUEST_PARAM = ^REQUEST_PARAM;
-
 
   BEHAVIOR_EVENTS =
   (
@@ -590,6 +620,69 @@ type
 
   SciterWindowDelegate = function(hwnd: HWINDOW; msg: UINT; w: WParam; l: LPARAM; pParam: LPVOID; var pResult: LRESULT): BOOL; stdcall;
   PSciterWindowDelegate = ^SciterWindowDelegate;
+
+  ISciterRAPI = record
+    // a.k.a AddRef()
+    RequestUse: function(rq: HREQUEST): REQUEST_RESULT; stdcall;
+    // a.k.a Release()
+    RequestUnUse: function(rq: HREQUEST): REQUEST_RESULT; stdcall;
+    // get requested URL
+    RequestUrl: function(rq: HREQUEST; rcv: PLPCSTR_RECEIVER; rcv_param: LPVOID): REQUEST_RESULT; stdcall;
+    // get real, content URL (after possible redirection)
+    RequestContentUrl: function(rq: HREQUEST; rcv: PLPCSTR_RECEIVER; rcv_param: LPVOID): REQUEST_RESULT; stdcall;
+    // get requested data type
+    RequestGetRequestType: function(rq: HREQUEST; rcv: PLPCSTR_RECEIVER; rcv_param: LPVOID): REQUEST_RESULT; stdcall;
+    // get requested data type
+    RequestGetRequestedDataType: function(rq: HREQUEST; var pData: SciterResourceType): REQUEST_RESULT; stdcall;
+    // get received data type, string, mime type
+    RequestGetReceivedDataType: function(rq: HREQUEST; rcv: PLPCSTR_RECEIVER; rcv_param: LPVOID): REQUEST_RESULT; stdcall;
+    // get number of request parameters passed
+    RequestGetNumberOfParameters: function(rq: HREQUEST; var pData: UINT): REQUEST_RESULT; stdcall;
+    // get nth request parameter name
+    RequestGetNthParameterName: function(rq: HREQUEST; n: UINT; rcv: PLPCSTR_RECEIVER; rcv_param: LPVOID): REQUEST_RESULT; stdcall;
+    // get nth request parameter value
+    RequestGetNthParameterValue: function(rq: HREQUEST; n: UINT; rcv: PLPCSTR_RECEIVER; rcv_param: LPVOID): REQUEST_RESULT; stdcall;
+    // get request times , ended - started = milliseconds to get the requst
+    RequestGetTimes: function(rq: HREQUEST; var pStarted: UINT; var pEnded: UINT): REQUEST_RESULT; stdcall;
+    // get number of request headers
+    RequestGetNumberOfRqHeaders: function(rq: HREQUEST; var pNumber: UINT): REQUEST_RESULT; stdcall;
+    // get nth request header name
+    RequestGetNthRqHeaderName: function(rq: HREQUEST; n: UINT; rcv: PLPCSTR_RECEIVER; rcv_param: LPVOID): REQUEST_RESULT; stdcall;
+    // get nth request header value
+    RequestGetNthRqHeaderValue: function(rq: HREQUEST; n: UINT; rcv: PLPCSTR_RECEIVER; rcv_param: LPVOID): REQUEST_RESULT; stdcall;
+    // get number of response headers
+    RequestGetNumberOfRspHeaders: function(rq: HREQUEST; var pNumber: UINT): REQUEST_RESULT; stdcall;
+    // get nth response header name
+    RequestGetNthRspHeaderName: function(rq: HREQUEST; n: UINT; rcv: PLPCSTR_RECEIVER; rcv_param: LPVOID): REQUEST_RESULT; stdcall;
+    // get nth response header value
+    RequestGetNthRspHeaderValue: function(rq: HREQUEST; n: UINT; rcv: PLPCSTR_RECEIVER; rcv_param: LPVOID): REQUEST_RESULT; stdcall;
+    // get completion status (CompletionStatus - http response code : 200, 404, etc.)
+    RequestGetCompletionStatus: function(rq: HREQUEST; var pState: REQUEST_STATE; var pCompletionStatus: UINT): REQUEST_RESULT; stdcall;
+    // get proxy host
+    RequestGetProxyHost: function(rq: HREQUEST; rcv: PLPCSTR_RECEIVER; rcv_param: LPVOID): REQUEST_RESULT; stdcall;
+    // get proxy port
+    RequestGetProxyPort: function(rq: HREQUEST; var pPort: UINT): REQUEST_RESULT; stdcall;
+    // mark reequest as complete with status and data
+    RequestSetSucceeded: function(rq: HREQUEST; status: UINT; dataOrNull: PByte; dataLength: UINT): REQUEST_RESULT; stdcall;
+    // mark reequest as complete with failure and optional data
+    RequestSetFailed: function(rq: HREQUEST; status: UINT; dataOrNull: PByte; dataLength: UINT): REQUEST_RESULT; stdcall;
+    // append received data chunk
+    RequestAppendDataChunk: function(rq: HREQUEST; data: PByte; dataLength: UINT): REQUEST_RESULT; stdcall;
+    // set request header (single item)
+    RequestSetRqHeader: function(rq: HREQUEST; name: PWideChar; value: PWideChar): REQUEST_RESULT; stdcall;
+    // set respone header (single item)
+    RequestSetRspHeader: function(rq: HREQUEST; name: PWideChar; value: PWideChar): REQUEST_RESULT; stdcall;
+    // set received data type, string, mime type
+    RequestSetReceivedDataType: function(rq: HREQUEST; rqType: PAnsiChar): REQUEST_RESULT; stdcall;
+    // set received data encoding, string
+    RequestSetReceivedDataEncoding: function(rq: HREQUEST; encoding: PAnsiChar): REQUEST_RESULT; stdcall;
+    // get received (so far) data
+    RequestGetData: function(rq: HREQUEST; rcv: PLPCSTR_RECEIVER; rcv_param: LPVOID): REQUEST_RESULT; stdcall;
+  end;
+
+  PSciterRApi = ^ISciterRAPI;
+  SciterRApiFunc = function: PSciterRApi; stdcall;
+  PSciterRApiFunc = ^SciterRApiFunc;
 
   ISciterAPI = record
     Version: UINT;
@@ -776,7 +869,7 @@ type
     SciterPostCallback: TProcPointer;
 
 //    GetSciterGraphicsAPI: TProcPointer;
-//    GetSciterRequestAPI: TProcPointer;
+    GetSciterRequestAPI: SciterRApiFunc;
 
 //    SciterCreateOnDirectXWindow: function(hwnd: HWINDOW; var pSwapChain: IDXGISwapChain): BOOL; stdcall;
 //    SciterRenderOnDirectXWindow: function(hwnd: HWINDOW; elementToRenderOrNull: HELEMENT; frontLayer: BOOL): BOOL; stdcall;
@@ -784,11 +877,8 @@ type
   end;
 
   PSciterApi = ^ISciterAPI;
-  
-  
   SciterApiFunc = function: PSciterApi; stdcall;
   PSciterApiFunc = ^SciterApiFunc;
-
 
   INITIALIZATION_EVENTS =
   (
@@ -990,11 +1080,9 @@ type
   end;
   PSCROLL_PARAMS = ^SCROLL_PARAMS;
 
-
   { Inspector }
   TSciterInspector = procedure(root: HELEMENT; papi: PSciterApi); stdcall;
   TSciterWindowInspector = procedure(hwndSciter: HWINDOW; papi: PSciterApi); stdcall;
-
 
   { Exceptions }
   ESciterException = class(Exception)
@@ -1040,6 +1128,7 @@ function T2V(const vm: HVM; Value: tiscript_value): Variant;
 function V2T(const vm: HVM; const Value: Variant): tiscript_value;
 
 function API: PSciterApi;
+function RAPI: PSciterRApi;
 function NI: ptiscript_native_interface;
 function IsNameExists(const vm: HVM; ns: tiscript_value; const Name: WideString): boolean;
 function IsNativeClassExists(const vm: HVM; const Name: WideString): boolean;
@@ -1065,6 +1154,7 @@ implementation
 
 var
   FAPI: PSciterApi;
+  FRAPI: PSciterRApi;
   FNI: ptiscript_native_interface;
   HSCITER: HMODULE;
   RecordVariantType: TRecordVariantType;
@@ -1346,6 +1436,13 @@ begin
   Result := FAPI;
 end;
 
+function RAPI: PSciterRApi;
+begin
+  if FRAPI = nil then
+    FRAPI := API.GetSciterRequestAPI();
+  Result := FRAPI;
+end;
+
 { SciterValue to Variant conversion }
 function S2V(Value: PSciterValue; var OutValue: Variant): UINT;
 var
@@ -1570,7 +1667,7 @@ begin
         Result := API.ValueIntDataSet(SciterValue, c32, T_INT, 0);
       end;
     varInt64:
-      Result := API.ValueInt64DataSet(SciterValue, Value, T_INT, 0);
+      Result := API.ValueIntDataSet(SciterValue, Value, T_INT, 0);
     varSingle,
     varDouble:
       Result := API.ValueFloatDataSet(SciterValue, Double(Value), T_FLOAT, 0);
