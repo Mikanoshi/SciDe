@@ -1149,6 +1149,7 @@ function GetNativeObjectJson(const Value: PSciterValue): WideString;
 var
   SCITER_DLL_DIR: String = '';
   varRecordEx: Word = 0;
+  varObject: Word = 0;
 
 implementation
 
@@ -1470,7 +1471,7 @@ begin
     T_ARRAY:
       begin
         API.ValueElementsCount(Value, arrSize);
-        OutValue := VarArrayCreate([0, arrSize], varVariant);
+        OutValue := VarArrayCreate([0, arrSize - 1], varVariant);
         for j := 0 to arrSize - 1 do
         begin
           oArrItem := Unassigned;
@@ -1743,12 +1744,16 @@ begin
               begin
                 sWStr := aval.AsString;
                 API.ValueStringDataSet(@elem, PWideChar(sWStr), Length(sWStr), 0);
-              end else
+              end else if aval.Kind = tkVariant then
+                V2S(aval.AsVariant, @elem)
+              else
                 raise ESciterNotImplementedException.CreateFmt('Cannot convert array element of type %d to Sciter value.', [Integer(aval.Kind)]);
               API.ValueNthElementValueSet(@val, j, @elem);
               API.ValueClear(@elem);
             end;
-          end else
+          end else if rval.Kind = tkVariant then
+            V2S(rval.AsVariant, @val)
+          else
             raise ESciterNotImplementedException.CreateFmt('Cannot convert record field of type %d to Sciter value.', [Integer(rval.Kind)]);
 
           Result := API.ValueSetValueToKey(SciterValue, @key, @val);

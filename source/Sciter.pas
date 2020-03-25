@@ -820,6 +820,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    function RecordToVar<T>(const obj: T): Variant;
     function Call(const FunctionName: WideString; const Args: array of Variant): Variant;
     procedure Fire(he: HELEMENT; cmd: UINT; data: Variant; async: Boolean = True);
     procedure FireRoot(cmd: UINT; data: Variant; async: Boolean = True); overload;
@@ -2486,6 +2487,17 @@ begin
       inherited WndProc(Message);
   end else
     inherited WndProc(Message);
+end;
+
+function TSciter.RecordToVar<T>(const obj: T): Variant;
+begin
+  with TRecordVarData(Result) do
+  begin
+    VType := varRecordEx;
+    VRecord := TRecordData.Create;
+    VRecord.RecObj := @obj;
+    VRecord.RecType := TypeInfo(T);
+  end;
 end;
 
 constructor TElement.Create(ASciter: TSciter; h: HELEMENT);

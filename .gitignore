@@ -5,3 +5,4 @@
 *.dproj.local
 *.groupproj.local
 *.mes
+*.$manifest
