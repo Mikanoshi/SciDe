@@ -842,7 +842,7 @@ type
     ValueNthElementValueSet: function(pval: PSciterValue; n: Integer; pval_to_set: PSciterValue): UINT; stdcall;
     ValueNthElementKey: function(Value: PSciterValue; n: Integer; var retval: TSciterValue): UINT; stdcall;
     ValueEnumElements: function(Value: PSciterValue; penum, param: Pointer): UINT; stdcall;
-    ValueSetValueToKey: function(Value: PSciterValue; const pKey: PSciterValue; const pValToSte: PSciterValue): UINT; stdcall;
+    ValueSetValueToKey: function(Value: PSciterValue; const pKey: PSciterValue; const pValToSet: PSciterValue): UINT; stdcall;
     ValueGetValueOfKey: function(Value: PSciterValue; const pKey: PSciterValue; var retval: TSciterValue): UINT; stdcall;
     ValueToString: function(Value: PSciterValue; How: VALUE_STRING_CVT_TYPE): UINT; stdcall;
     ValueFromString: function(Value: PSciterValue; str: PWideChar; strLength: UINT; how: VALUE_STRING_CVT_TYPE): UINT; stdcall;
@@ -1121,6 +1121,25 @@ type
     function IsClear(const V: TVarData): Boolean; override;
   end;
 
+  TSymbolData = class(TPersistent)
+  public
+    Symbol: String;
+  end;
+
+  TSymbolVarData = packed record
+    VType: TVarType;
+    Reserved1, Reserved2, Reserved3: Word;
+    VSymbol: TSymbolData;
+    Reserved4: NativeInt;
+  end;
+
+  TSymbolVariantType = class(TCustomVariantType)
+  public
+    procedure Copy(var Dest: TVarData; const Source: TVarData; const Indirect: Boolean); override;
+    procedure Clear(var V: TVarData); override;
+    function IsClear(const V: TVarData): Boolean; override;
+  end;
+
 { Conversion functions. Mnemonics are: T - tiscript_value, S - TSciterValue, V - VARIANT }
 function S2V(Value: PSciterValue; var OutValue: Variant): UINT;
 function V2S(const Value: Variant; SciterValue: PSciterValue): UINT;
@@ -1149,7 +1168,7 @@ function GetNativeObjectJson(const Value: PSciterValue): WideString;
 var
   SCITER_DLL_DIR: String = '';
   varRecordEx: Word = 0;
-  varObject: Word = 0;
+  varSymbol: Word = 0;
 
 implementation
 
@@ -1159,6 +1178,7 @@ var
   FNI: ptiscript_native_interface;
   HSCITER: HMODULE;
   RecordVariantType: TRecordVariantType;
+  SymbolVariantType: TSymbolVariantType;
 
 { TRecordVariantType }
 
@@ -1182,6 +1202,29 @@ end;
 function TRecordVariantType.IsClear(const V: TVarData): Boolean;
 begin
   Result := not Assigned(TRecordVarData(V).VRecord);
+end;
+
+{ TSymbolVariantType }
+
+procedure TSymbolVariantType.Copy(var Dest: TVarData; const Source: TVarData; const Indirect: Boolean);
+begin
+  with TSymbolVarData(Dest) do
+  begin
+    VType := VarType;
+    VSymbol := TSymbolData.Create;
+    VSymbol.Symbol := TSymbolVarData(Source).VSymbol.Symbol;
+  end;
+end;
+
+procedure TSymbolVariantType.Clear(var V: TVarData);
+begin
+  V.VType := varEmpty;
+  FreeAndNil(TSymbolVarData(V).VSymbol);
+end;
+
+function TSymbolVariantType.IsClear(const V: TVarData): Boolean;
+begin
+  Result := not Assigned(TSymbolVarData(V).VSymbol);
 end;
 
 function GetNativeObjectJson(const Value: PSciterValue): WideString;
@@ -1693,6 +1736,11 @@ begin
         //pDisp._AddRef;
         Result := API.ValueBinaryDataSet(SciterValue, PByte(pDisp), 1, T_OBJECT, 0);
       end;
+    else if vt = varSymbol then
+      begin
+        sWStr := TSymbolVarData(Value).VSymbol.Symbol;
+        Result := API.ValueStringDataSet(SciterValue, PWideChar(sWStr), Length(sWStr), UINT(UT_STRING_SYMBOL))
+      end
     else if vt = varRecordEx then
       begin
         valfields := TRTTIContext.Create.GetType(TRecordVarData(Value).VRecord.RecType).GetFields;
@@ -1808,9 +1856,12 @@ initialization
   HSCITER := 0;
   RecordVariantType := TRecordVariantType.Create;
   varRecordEx := RecordVariantType.VarType;
+  SymbolVariantType := TSymbolVariantType.Create;
+  varSymbol := SymbolVariantType.VarType;
 
 finalization
   FreeAndNil(RecordVariantType);
+  FreeAndNil(SymbolVariantType);
   if HSCITER <> 0 then
     FreeLibrary(HSCITER);
 

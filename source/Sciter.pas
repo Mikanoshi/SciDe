@@ -820,7 +820,8 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    function RecordToVar<T>(const obj: T): Variant;
+    function RecordToVar<T>(const Obj: T): Variant;
+    function SymbolToVar(const Symbol: String): Variant;
     function Call(const FunctionName: WideString; const Args: array of Variant): Variant;
     procedure Fire(he: HELEMENT; cmd: UINT; data: Variant; async: Boolean = True);
     procedure FireRoot(cmd: UINT; data: Variant; async: Boolean = True); overload;
@@ -832,7 +833,7 @@ type
     function FindElement(Point: TPoint): IElement;
     function FindElement2(X, Y: Integer): IElement;
     procedure GC;
-    function GetElementByHandle(Handle: Integer): IElement;
+    function GetElementByHandle(Handle: NativeInt): IElement;
     function GetMinHeight(Width: Integer): Integer;
     function GetMinWidth: Integer;
     function JsonToSciterValue(const Json: WideString): TSciterValue;
@@ -1033,7 +1034,7 @@ begin
   end;
 end;
 
-function HostCallback(pns: LPSCITER_CALLBACK_NOTIFICATION; callbackParam: Pointer ): UINT; stdcall;
+function HostCallback(pns: LPSCITER_CALLBACK_NOTIFICATION; callbackParam: Pointer): UINT; stdcall;
 var
   pSciter: TSciter;
 begin
@@ -1575,7 +1576,7 @@ begin
   NI.invoke_gc(VM);
 end;
 
-function TSciter.GetElementByHandle(Handle: Integer): IElement;
+function TSciter.GetElementByHandle(Handle: NativeInt): IElement;
 begin
   Result := ElementFactory(Self, HELEMENT(Handle));
 end;
@@ -2489,7 +2490,7 @@ begin
     inherited WndProc(Message);
 end;
 
-function TSciter.RecordToVar<T>(const obj: T): Variant;
+function TSciter.RecordToVar<T>(const Obj: T): Variant;
 begin
   with TRecordVarData(Result) do
   begin
@@ -2497,6 +2498,16 @@ begin
     VRecord := TRecordData.Create;
     VRecord.RecObj := @obj;
     VRecord.RecType := TypeInfo(T);
+  end;
+end;
+
+function TSciter.SymbolToVar(const Symbol: String): Variant;
+begin
+  with TSymbolVarData(Result) do
+  begin
+    VType := varSymbol;
+    VSymbol := TSymbolData.Create;
+    VSymbol.Symbol := Symbol;
   end;
 end;
 
