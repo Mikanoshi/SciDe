@@ -695,8 +695,8 @@ type
     SciterLoadFile: function(hWndSciter: HWINDOW; filename:LPCWSTR): BOOL; stdcall;
     SciterLoadHtml: function(hWndSciter: HWINDOW; html: PByte; htmlSize: UINT; baseUrl: PWideChar): BOOL; stdcall;
     SciterSetCallback: procedure(hWndSciter: HWINDOW; cb: LPSciterHostCallback; cbParam: Pointer); stdcall;
-    SciterSetMasterCSS: function(utf: PAnsiChar; numBytes: UINT): BOOL; stdcall;
-    SciterAppendMasterCSS: function(utf: PAnsiChar; numBytes: UINT): BOOL; stdcall;
+    SciterSetMasterCSS: function(utf8: PAnsiChar; numBytes: UINT): BOOL; stdcall;
+    SciterAppendMasterCSS: function(utf8: PAnsiChar; numBytes: UINT): BOOL; stdcall;
     SciterSetCSS: function(hWndSciter: HWindow; utf8: PAnsiChar; numBytes: UINT; baseUrl: PWideChar; mediaType: PWideChar): BOOL; stdcall;
     SciterSetMediaType: function(hWndSciter: HWINDOW; mediaTYpe: PWideChar): BOOL; stdcall;
     SciterSetMediaVars: function(hWndSciter: HWINDOW; const mediaVars: PSciterValue): BOOL; stdcall;
@@ -868,7 +868,7 @@ type
     SciterGetCallbackParam: TProcPointer;
     SciterPostCallback: TProcPointer;
 
-//    GetSciterGraphicsAPI: TProcPointer;
+    GetSciterGraphicsAPI: TProcPointer;
     GetSciterRequestAPI: SciterRApiFunc;
 
 //    SciterCreateOnDirectXWindow: function(hwnd: HWINDOW; var pSwapChain: IDXGISwapChain): BOOL; stdcall;

@@ -66,7 +66,7 @@ type
     procedure Sciter1ScriptingCall(ASender: TObject; const Args:
         TElementOnScriptingCallArgs);
     procedure Sciter1LoadData(ASender: TObject; const url: WideString; resType: SciterResourceType; requestId: Pointer;
-      out discard, delay: Boolean);
+      out discard, delay, myself: Boolean);
   private
     FButton: TButton;
     FTxtEvents: IElementEvents;
@@ -470,7 +470,7 @@ begin
 end;
 
 procedure TMainForm.Sciter1LoadData(ASender: TObject; const url: WideString; resType: SciterResourceType;
-  requestId: Pointer; out discard, delay: Boolean);
+  requestId: Pointer; out discard, delay, myself: Boolean);
 var
   sFileName: AnsiString;
   pMemStm: TMemoryStream;
