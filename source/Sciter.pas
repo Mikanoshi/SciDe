@@ -274,6 +274,7 @@ type
     destructor Destroy; override;
     property Element: IElement read FElement;
     property Handled: Boolean read FHandled write FHandled;
+    property Sciter: TSciter read FSciter;
   end;
 
   TElementOnBehaviorEvent = procedure(ASender: TObject; const Args: TElementOnBehaviorEventArgs) of object;
@@ -281,7 +282,7 @@ type
   TSciterOnMessage = procedure(ASender: TObject; const Args: TSciterOnMessageEventArgs) of object;
 
   TSciterOnLoadData = procedure(ASender: TObject; const url: WideString; resType: SciterResourceType;
-                                                  requestId: Pointer; out discard: Boolean; out delay: Boolean) of object;
+                                                  requestId: Pointer; out discard: Boolean; out delay: Boolean; out myself: Boolean) of object;
   TSciterOnDataLoaded = procedure(ASender: TObject; const url: WideString; resType: SciterResourceType;
                                                     data: PByte; dataLength: Integer; status: Integer;
                                                     requestId: Cardinal) of object;
@@ -822,6 +823,8 @@ type
     destructor Destroy; override;
     function RecordToVar<T>(const Obj: T): Variant;
     function SymbolToVar(const Symbol: String): Variant;
+    function AppendMasterCSS(const CSSString: UTF8String): BOOL;
+    function SetMasterCSS(const CSSString: UTF8String): BOOL;
     function Call(const FunctionName: WideString; const Args: array of Variant): Variant;
     procedure Fire(he: HELEMENT; cmd: UINT; data: Variant; async: Boolean = True);
     procedure FireRoot(cmd: UINT; data: Variant; async: Boolean = True); overload;
@@ -844,6 +847,7 @@ type
     function GetPackedItem(const ResName: String; const FileName: PWideChar; var mem: TMemoryStream): Boolean;
     procedure MouseWheelHandler(var Message: TMessage); override;
     procedure Println(const Message: WideString; const Args: Array of const);
+    function HasComObject(const Name: WideString): Boolean;
     procedure RegisterComObject(const Name: WideString; const Obj: Variant); overload;
     procedure RegisterComObject(const Name: WideString; const Obj: IDispatch); overload;
     function RegisterNativeClass(const ClassInfo: ISciterClassInfo; ThrowIfExists: Boolean; ReplaceClassDef: Boolean = False): tiscript_class; overload;
@@ -866,6 +870,7 @@ type
     function TryCall(const FunctionName: WideString; const Args: array of Variant; out RetVal: Variant): boolean; overload;
     procedure UnsubscribeAll;
     procedure UpdateWindow;
+    procedure Refresh;
     property Html: WideString read GetHtml;
     property Root: IElement read GetRoot;
     property Focused: IElement read GetFocused;
@@ -1372,6 +1377,16 @@ begin
   end;
 end;
 
+function TSciter.AppendMasterCSS(const CSSString: UTF8String): BOOL;
+begin
+  Result := API.SciterAppendMasterCSS(PAnsiChar(CSSString), Length(CSSString));
+end;
+
+function TSciter.SetMasterCSS(const CSSString: UTF8String): BOOL;
+begin
+  Result := API.SciterSetMasterCSS(PAnsiChar(CSSString), Length(CSSString));
+end;
+
 function TSciter.Call(const FunctionName: WideString; const Args: array of Variant): Variant;
 begin
   if not TryCall(FunctionName, Args, Result) then
@@ -1466,6 +1481,9 @@ procedure TSciter.DestroyWnd;
 var
   pbHandled: BOOL;
 begin
+  if DesignMode then
+    Exit;
+
   API.SciterSetCallback(Handle, nil, nil);
   API.SciterWindowDetachEventHandler(Handle, LPELEMENT_EVENT_PROC(@_SciterViewEventProc), Self);
   API.SciterSetupDebugOutput(Handle, nil, nil);
@@ -1801,7 +1819,7 @@ end;
 
 function TSciter.HandleLoadData(var data: SCN_LOAD_DATA): UINT;
 var
-  discard, delay: Boolean;
+  discard, delay, myself: Boolean;
   wUrl: WideString;
   wResName: WideString;
   pStream: TCustomMemoryStream;
@@ -1834,11 +1852,13 @@ begin
     if Assigned(FOnLoadData) then
     begin
       wUrl := WideString(data.uri);
-      FOnLoadData(Self, wUrl, data.dataType, data.requestId, discard, delay);
+      FOnLoadData(Self, wUrl, data.dataType, data.requestId, discard, delay, myself);
       if discard then
         Result := LOAD_DISCARD
       else if delay then
-        Result := LOAD_DELAYED;
+        Result := LOAD_DELAYED
+      else if myself then
+        Result := LOAD_MYSELF;
     end;
   end;
 end;
@@ -1976,7 +1996,9 @@ begin
   FHtml := '';
   FBaseUrl := '';
 
-  Result := API.SciterLoadFile(Handle, PWideChar(URL));
+  try
+    Result := API.SciterLoadFile(Handle, PWideChar(URL));
+  except end;
 end;
 
 function TSciter.LoadPackedResource(const ResName: String; const ResType: PWideChar): Boolean;
@@ -2098,6 +2120,18 @@ end;
 function TSciter.QuerySubscriptionEvents: EVENT_GROUPS;
 begin
   Result := HANDLE_ALL;
+end;
+
+function TSciter.HasComObject(const Name: WideString): Boolean;
+var
+  var_name: tiscript_value;
+  zns: tiscript_value;
+  class_define: tiscript_value;
+begin
+  var_name := NI.string_value(vm, PWideChar(Name), Length(Name));
+  zns := NI.get_global_ns(vm);
+  class_define := NI.get_prop(VM, zns, var_name);
+  result := NI.is_native_object(class_define);
 end;
 
 procedure TSciter.RegisterComObject(const Name: WideString; const Obj: Variant);
@@ -2444,6 +2478,12 @@ begin
   API.SciterUpdateWindow(Self.Handle);
 end;
 
+procedure TSciter.Refresh;
+begin
+  if not (FUrl = '') then
+    LoadURL(FUrl);
+end;
+
 procedure TSciter.WndProc(var Message: TMessage);
 var
   llResult: LRESULT;
@@ -2481,7 +2521,9 @@ begin
         end;
     end;
 
-    llResult := API.SciterProcND(Handle, Message.Msg, Message.WParam, Message.LParam, bHandled);
+    if IsWindow(Handle) then
+      llResult := API.SciterProcND(Handle, Message.Msg, Message.WParam, Message.LParam, bHandled);
+
     if bHandled then
       Message.Result := llResult
     else

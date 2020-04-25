@@ -1,10 +1,12 @@
 # SciDe
-[Sciter](https://sciter.com/) bindings for Delphi
 
-## Supported versions
-Delphi 2009 or newer, 32 and 64-bit platforms
+[![Download Sciter](https://img.shields.io/badge/Delphi-2009+%2032/64bit-ad1718?style=flat-square)](https://sciter.com/download/)
+[![Download Sciter](https://img.shields.io/badge/Sciter-%204.4.x.x-0077b6?style=flat-square)](https://sciter.com/download/)
+[![Join Sciter forums](https://img.shields.io/badge/Forum-sciter.com-B5712D.svg?style=flat-square)](https://sciter.com/forums)
 
-Sciter 4.4+
+Sciter bindings for Delphi.
+
+Forked from [da-baranov/SciDe](https://github.com/da-baranov/SciDe).
 
 ## Installation
 * Open project group file (.bpg or .groupproj) in Delphi IDE
