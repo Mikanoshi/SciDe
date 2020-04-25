@@ -1,6 +1,6 @@
 # SciDe
 
-[![Download Sciter](https://img.shields.io/badge/Delphi-2009+%2032/64bit-ad1718?style=flat-square)](https://sciter.com/download/)
+[![Get Delphi](https://img.shields.io/badge/Delphi-2009+%2032/64bit-ad1718?style=flat-square)](https://www.embarcadero.com/products/delphi)
 [![Download Sciter](https://img.shields.io/badge/Sciter-%204.4.x.x-0077b6?style=flat-square)](https://sciter.com/download/)
 [![Join Sciter forums](https://img.shields.io/badge/Forum-sciter.com-B5712D.svg?style=flat-square)](https://sciter.com/forums)
 
