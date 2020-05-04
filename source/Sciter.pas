@@ -349,7 +349,7 @@ type
     ['{E2C542D1-5B7B-4513-BFBC-7B0DD9FB04DE}']
     procedure AppendChild(const Element: IElement);
     function AttachHwndToElement(h: HWND): boolean;
-    function Call(const Method: WideString; const Args: Array of Variant): Variant;
+    function Call(const Method: WideString; const Args: Array of Variant; Global: Boolean = False): Variant;
     function CloneElement: IElement;
     function CombineURL(const Url: WideString): WideString;
     function CreateElement(const Tag: WideString; const Text: WideString): IElement;
@@ -413,7 +413,7 @@ type
     function SubscribeSize(const Selector: WideString; const Handler: TElementOnSize): IElement;
     function SubscribeTimer(const Selector: WideString; const Handler: TElementOnTimer): IElement;
     procedure Swap(const Element: IElement);
-    function TryCall(const Method: WideString; const Args: array of Variant; out RetVal: Variant): Boolean;
+    function TryCall(const Method: WideString; const Args: array of Variant; out RetVal: Variant; Global: Boolean = False): Boolean;
     procedure Update;
     property Attr[const AttrName: WideString]: WideString read GetAttr write SetAttr;
     property AttrCount: Integer read GetAttrCount;
@@ -577,7 +577,7 @@ type
     procedure AppendChild(const Element: IElement);
     function AttachHwndToElement(h: HWND): boolean;
     class function BehaviorName: AnsiString; virtual;
-    function Call(const Method: WideString; const Args: Array of Variant): Variant;
+    function Call(const Method: WideString; const Args: Array of Variant; Global: Boolean = False): Variant;
     procedure ClearAttributes;
     function CloneElement: IElement;
     function CombineURL(const Url: WideString): WideString;
@@ -619,7 +619,7 @@ type
     function SubscribeSize(const Selector: WideString; const Handler: TElementOnSize): IElement;
     function SubscribeTimer(const Selector: WideString; const Handler: TElementOnTimer): IElement;
     procedure Swap(const Element: IElement);
-    function TryCall(const Method: WideString; const Args: array of Variant; out RetVal: Variant): Boolean;
+    function TryCall(const Method: WideString; const Args: array of Variant; out RetVal: Variant; Global: Boolean = False): Boolean;
     procedure Update;
     property Attr[const AttrName: WideString]: WideString read GetAttr write SetAttr;
     property AttrCount: Integer read GetAttrCount;
@@ -2565,14 +2565,15 @@ begin
   FFilterControlEvents := BEHAVIOR_EVENTS_ALL;
   API.Sciter_UseElement(FElement);
   API.SciterAttachEventHandler(FElement, LPELEMENT_EVENT_PROC(@_SciterElementEventProc), Self);
-  FSciter.ManagedElements.Add(Self);
+  if Assigned(FSciter) then
+    FSciter.ManagedElements.Add(Self);
 end;
 
 destructor TElement.Destroy;
 begin
   API.SciterDetachEventHandler(FElement, LPELEMENT_EVENT_PROC(@_SciterElementEventProc), Self);
   API.Sciter_UnuseElement(FElement);
-  if Assigned(FSciter.ManagedElements) then
+  if Assigned(FSciter) and Assigned(FSciter.ManagedElements) then
   if FSciter.ManagedElements.IndexOf(Self) <> - 1 then
     FSciter.ManagedElements.Remove(Self);
   inherited;
@@ -2598,9 +2599,9 @@ begin
   Result := '';
 end;
 
-function TElement.Call(const Method: WideString; const Args: array of Variant): Variant;
+function TElement.Call(const Method: WideString; const Args: array of Variant; Global: Boolean = False): Variant;
 begin
-  if not TryCall(Method, Args, Result) then
+  if not TryCall(Method, Args, Result, Global) then
     SciterWarning('Method "%s" call failed.', [Method]);
 end;
 
@@ -3858,16 +3859,15 @@ begin
   );
 end;
 
-function TElement.TryCall(const Method: WideString; const Args: array of Variant; out RetVal: Variant): Boolean;
+function TElement.TryCall(const Method: WideString; const Args: array of Variant; out RetVal: Variant; Global: Boolean = False): Boolean;
 var
   sMethod: AnsiString;
   sargs: array of TSciterValue;
   sargc: UINT;
   i: Integer;
   pRetVal: TSciterValue;
+  res: SCDOM_RESULT;
 begin
-  API.ValueInit(@pRetVal);
-  
   sargc := Length(Args);
   if sargc > 256 then
     SciterError('Too many arguments.');
@@ -3884,15 +3884,20 @@ begin
 
   API.ValueInit(@pRetVal);
 
-  if API.SciterCallScriptingMethod(FElement, PAnsiChar(sMethod), @sargs[0], sargc, pRetVal) <> SCDOM_OK then
-  begin
-    RetVal := Unassigned;
-    Result := False;
-  end
-    else
+  if Global then
+    res := API.SciterCallScriptingFunction(FElement, PAnsiChar(sMethod), @sargs[0], sargc, pRetVal)
+  else
+    res := API.SciterCallScriptingMethod(FElement, PAnsiChar(sMethod), @sargs[0], sargc, pRetVal);
+
+  if res = SCDOM_OK then
   begin
     S2V(@pRetVal, RetVal);
     Result := True;
+  end
+    else
+  begin
+    RetVal := Unassigned;
+    Result := False;
   end;
 
   for i := Low(sargs) to High(sargs) do

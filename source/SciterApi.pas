@@ -1205,6 +1205,8 @@ function SciterVarToString(value: PSciterValue): WideString;
 procedure ThrowError(const vm: HVM; const Message: AnsiString); overload;
 procedure ThrowError(const vm: HVM; const Message: WideString); overload;
 function GetNativeObjectJson(const Value: PSciterValue): WideString;
+function CallScriptFunction(Element: HELEMENT; const FuncName: AnsiString; Params: TArray<Variant>): SCDOM_RESULT; overload;
+function CallScriptFunction(Element: HELEMENT; const FuncName: AnsiString; Params: TArray<Variant>; var RetVal: TSciterValue): SCDOM_RESULT; overload;
 
 var
   SCITER_DLL_DIR: String = '';
@@ -1287,6 +1289,33 @@ begin
   API.ValueToString(Value, CVT_XJSON_LITERAL);
   API.ValueStringData(Value, pWStr, iNum);
   Result := WideString(pWstr);
+end;
+
+function CallScriptFunction(Element: HELEMENT; const FuncName: AnsiString; Params: TArray<Variant>): SCDOM_RESULT;
+var
+  RetVal: TSciterValue;
+begin
+  API.ValueInit(@RetVal);
+  CallScriptFunction(Element, FuncName, Params, RetVal);
+  API.ValueClear(@RetVal);
+end;
+
+function CallScriptFunction(Element: HELEMENT; const FuncName: AnsiString; Params: TArray<Variant>; var RetVal: TSciterValue): SCDOM_RESULT;
+var
+  SParams: TArray<TSciterValue>;
+  I: Integer;
+begin
+  SetLength(SParams, Length(Params));
+  for I := Low(Params) to High(Params) do
+  begin
+    API.ValueInit(@SParams[I]);
+    V2S(Params[I], @SParams[I]);
+  end;
+
+  Result := API.SciterCallScriptingFunction(Element, PAnsiChar(FuncName), @SParams[0], Length(SParams), RetVal);
+
+  for I := Low(SParams) to High(SParams) do
+    API.ValueClear(@SParams[I]);
 end;
 
 function NI: ptiscript_native_interface;
@@ -1628,7 +1657,6 @@ begin
       begin
         raise ESciterNotImplementedException.CreateFmt('Cannot convert T_LENGTH to Variant (not implemented).', []);
       end;
-    
     T_NULL:
       begin
         OutValue := Null;
@@ -1703,15 +1731,92 @@ var
   date: TDateTime;
   st: SYSTEMTIME;
   ft: FILETIME;
+
+  procedure ProcessRecord(sval: PSciterValue; rectype, recobj: Pointer);
+  var
+    i, j: Integer;
+    valfields: TArray<TRttiField>;
+    rval, aval: TValue;
+    key, val, elem: TSciterValue;
+  begin
+    valfields := TRTTIContext.Create.GetType(rectype).GetFields;
+    for i := Low(valfields) to High(valfields) do
+    begin
+      API.ValueInit(@key);
+      API.ValueInit(@val);
+      API.ValueStringDataSet(@key, PWideChar(valfields[i].Name), Length(valfields[i].Name), UINT(UT_STRING_SYMBOL));
+
+      rval := valfields[i].GetValue(recobj);
+      if rval.Kind = tkInteger then
+        API.ValueIntDataSet(@val, rval.AsInteger, T_INT, 0)
+      else if rval.Kind = tkEnumeration then
+      begin
+        if valfields[i].FieldType.Name = 'Boolean' then
+        begin
+          if rval.AsOrdinal = 1 then
+            API.ValueIntDataSet(@val, 1, T_BOOL, 0)
+          else
+            API.ValueIntDataSet(@val, 0, T_BOOL, 0)
+        end else
+          API.ValueIntDataSet(@val, rval.AsOrdinal, T_INT, 0)
+      end
+      else if (rval.Kind = tkString) or (rval.Kind = tkWString) or (rval.Kind = tkUString) or (rval.Kind = tkLString) then
+        API.ValueStringDataSet(@val, PWideChar(rval.AsString), Length(rval.AsString), 0)
+      else if rval.Kind = tkFloat then
+      begin
+        date := TDateTime(rval.AsExtended);
+        d := Double(date);
+        VariantTimeToSystemTime(d, st);
+        SystemTimeToFileTime(st, ft);
+        i64 := Int64(ft);
+        Result := API.ValueInt64DataSet(@val, i64, T_DATE, UINT(True));
+      end else if (rval.Kind = tkArray) or (rval.Kind = tkDynArray) then
+      begin
+        for j := 0 to rval.GetArrayLength - 1 do
+        begin
+          API.ValueInit(@elem);
+          aval := rval.GetArrayElement(j);
+          if aval.Kind = tkInteger then
+            API.ValueIntDataSet(@elem, aval.AsInteger, T_INT, 0)
+          else if aval.Kind = tkEnumeration then
+          begin
+            if aval.AsBoolean then
+              API.ValueIntDataSet(@elem, 1, T_BOOL, 0)
+            else
+              API.ValueIntDataSet(@elem, 0, T_BOOL, 0)
+          end else if aval.Kind = tkUString then
+          begin
+            sWStr := aval.AsString;
+            API.ValueStringDataSet(@elem, PWideChar(sWStr), Length(sWStr), 0);
+          end else if aval.Kind = tkRecord then
+            ProcessRecord(@elem, aval.TypeInfo, aval.GetReferenceToRawData)
+          else if aval.Kind = tkVariant then
+            V2S(aval.AsVariant, @elem)
+          else
+            raise ESciterNotImplementedException.CreateFmt('Cannot convert array element of type %d to Sciter value.', [Integer(aval.Kind)]);
+          API.ValueNthElementValueSet(@val, j, @elem);
+          API.ValueClear(@elem);
+        end;
+      end else if rval.Kind = tkRecord then
+        ProcessRecord(@val, rval.TypeInfo, rval.GetReferenceToRawData)
+      else if rval.Kind = tkVariant then
+        V2S(rval.AsVariant, @val)
+      else
+        raise ESciterNotImplementedException.CreateFmt('Cannot convert record field of type %d to Sciter value.', [Integer(rval.Kind)]);
+
+      Result := API.ValueSetValueToKey(sval, @key, @val);
+      API.ValueClear(@key);
+      API.ValueClear(@val);
+    end;
+  end;
+
+var
   pDisp: IDispatch;
   cCur: Currency;
   vt: Word;
   i, j: Integer;
   oArrItem: Variant;
   sArrItem: TSciterValue;
-  key, val, elem: TSciterValue;
-  valfields: TArray<TRttiField>;
-  rval, aval: TValue;
 begin
   vt := VarType(Value);
 
@@ -1790,73 +1895,7 @@ begin
         Result := API.ValueStringDataSet(SciterValue, PWideChar(sWStr), Length(sWStr), UINT(UT_STRING_SYMBOL))
       end
     else if vt = varRecordEx then
-      begin
-        valfields := TRTTIContext.Create.GetType(TRecordVarData(Value).VRecord.RecType).GetFields;
-        for i := Low(valfields) to High(valfields) do
-        begin
-          API.ValueInit(@key);
-          API.ValueInit(@val);
-          API.ValueStringDataSet(@key, PWideChar(valfields[i].Name), Length(valfields[i].Name), UINT(UT_STRING_SYMBOL));
-
-          rval := valfields[i].GetValue(TRecordVarData(Value).VRecord.RecObj);
-          if rval.Kind = tkInteger then
-            API.ValueIntDataSet(@val, rval.AsInteger, T_INT, 0)
-          else if rval.Kind = tkEnumeration then
-          begin
-            if valfields[i].FieldType.Name = 'Boolean' then
-            begin
-              if rval.AsOrdinal = 1 then
-                API.ValueIntDataSet(@val, 1, T_BOOL, 0)
-              else
-                API.ValueIntDataSet(@val, 0, T_BOOL, 0)
-            end else
-              API.ValueIntDataSet(@val, rval.AsOrdinal, T_INT, 0)
-          end
-          else if (rval.Kind = tkString) or (rval.Kind = tkWString) or (rval.Kind = tkUString) or (rval.Kind = tkLString) then
-            API.ValueStringDataSet(@val, PWideChar(rval.AsString), Length(rval.AsString), 0)
-          else if rval.Kind = tkFloat then
-          begin
-            date := TDateTime(rval.AsExtended);
-            d := Double(date);
-            VariantTimeToSystemTime(d, st);
-            SystemTimeToFileTime(st, ft);
-            i64 := Int64(ft);
-            Result := API.ValueInt64DataSet(@val, i64, T_DATE, UINT(True));
-          end else if (rval.Kind = tkArray) or (rval.Kind = tkDynArray) then
-          begin
-            for j := 0 to rval.GetArrayLength - 1 do
-            begin
-              API.ValueInit(@elem);
-              aval := rval.GetArrayElement(j);
-              if aval.Kind = tkInteger then
-                API.ValueIntDataSet(@elem, aval.AsInteger, T_INT, 0)
-              else if aval.Kind = tkEnumeration then
-              begin
-                if aval.AsBoolean then
-                  API.ValueIntDataSet(@elem, 1, T_BOOL, 0)
-                else
-                  API.ValueIntDataSet(@elem, 0, T_BOOL, 0)
-              end else if aval.Kind = tkUString then
-              begin
-                sWStr := aval.AsString;
-                API.ValueStringDataSet(@elem, PWideChar(sWStr), Length(sWStr), 0);
-              end else if aval.Kind = tkVariant then
-                V2S(aval.AsVariant, @elem)
-              else
-                raise ESciterNotImplementedException.CreateFmt('Cannot convert array element of type %d to Sciter value.', [Integer(aval.Kind)]);
-              API.ValueNthElementValueSet(@val, j, @elem);
-              API.ValueClear(@elem);
-            end;
-          end else if rval.Kind = tkVariant then
-            V2S(rval.AsVariant, @val)
-          else
-            raise ESciterNotImplementedException.CreateFmt('Cannot convert record field of type %d to Sciter value.', [Integer(rval.Kind)]);
-
-          Result := API.ValueSetValueToKey(SciterValue, @key, @val);
-          API.ValueClear(@key);
-          API.ValueClear(@val);
-        end;
-      end
+      ProcessRecord(SciterValue, TRecordVarData(Value).VRecord.RecType, TRecordVarData(Value).VRecord.RecObj)
     else
       raise ESciterNotImplementedException.CreateFmt('Cannot convert VARIANT of type %d to Sciter value.', [vt]);
   end;
