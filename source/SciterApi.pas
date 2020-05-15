@@ -259,6 +259,12 @@ type
     T_BYTES,
     T_OBJECT,
     T_DOM_OBJECT,
+    T_RESOURCE,
+    T_RANGE,
+    T_DURATION,
+    T_ANGLE,
+    T_COLOR,
+    T_ASSET = 21,
     T_DUMMY = MAXINT
   );
 
@@ -871,9 +877,13 @@ type
     GetSciterGraphicsAPI: TProcPointer;
     GetSciterRequestAPI: SciterRApiFunc;
 
-//    SciterCreateOnDirectXWindow: function(hwnd: HWINDOW; var pSwapChain: IDXGISwapChain): BOOL; stdcall;
-//    SciterRenderOnDirectXWindow: function(hwnd: HWINDOW; elementToRenderOrNull: HELEMENT; frontLayer: BOOL): BOOL; stdcall;
-//    SciterRenderOnDirectXTexture: function(hwnd: HWINDOW; elementToRenderOrNull: HELEMENT; var surface: IDXGISurface): BOOL; stdcall;
+    SciterCreateOnDirectXWindow: function(hwnd: HWINDOW; var pSwapChain: IUnknown): BOOL; stdcall; // IDXGISwapChain
+    SciterRenderOnDirectXWindow: function(hwnd: HWINDOW; elementToRenderOrNull: HELEMENT; frontLayer: BOOL): BOOL; stdcall;
+    SciterRenderOnDirectXTexture: function(hwnd: HWINDOW; elementToRenderOrNull: HELEMENT; var surface: IUnknown): BOOL; stdcall; // IDXGISurface
+
+    SciterAtomValue: function(name: PAnsiChar): UINT64; stdcall;
+    SciterAtomNameCB: function(atomv: UINT64; rcv: PLPCSTR_RECEIVER; rcv_param: LPVOID): BOOL; stdcall;
+    SciterSetGlobalAsset: function(pass: Pointer): BOOL; stdcall;
   end;
 
   PSciterApi = ^ISciterAPI;
@@ -1573,7 +1583,7 @@ var
   pbResult: PByte;
   cResult: Currency;
   st: SYSTEMTIME;
-  pDispValue: IDispatch;
+  //pDispValue: IDispatch;
   arrSize: UINT;
   sArrItem: TSciterValue;
   oArrItem: Variant;
@@ -1662,7 +1672,7 @@ begin
         OutValue := Null;
         Result := HV_OK;
       end;
-    T_OBJECT:
+    T_OBJECT, T_RESOURCE:
       // TODO: returns Variant if Object wraps IDispatch, JSON otherwise
       begin
         pbResult := nil;
@@ -1671,16 +1681,17 @@ begin
         begin
           if pbResult <> nil then
           begin
-            pDispValue := IDispatch(Pointer(pbResult));
-            try
-              pDispValue._AddRef;
-              pDispValue._Release;
-              OutValue := OleVariant(pDispValue);
-            except
-              // not an IDispatch, probably native tiscript object
-              OutValue := GetNativeObjectJson(Value);
+//            pDispValue := IDispatch(Pointer(pbResult));
+//            try
+//              pDispValue._AddRef;
+//              pDispValue._Release;
+//              OutValue := OleVariant(pDispValue);
+//            except
+//              // not an IDispatch, probably native tiscript object
+//              OutValue := GetNativeObjectJson(Value);
+              OutValue := NativeInt(pbResult);
               Result := HV_OK;
-            end;
+//            end;
           end
             else
           begin
@@ -1733,25 +1744,18 @@ var
   ft: FILETIME;
 
   procedure ProcessRecord(sval: PSciterValue; rectype, recobj: Pointer);
-  var
-    i, j: Integer;
-    valfields: TArray<TRttiField>;
-    rval, aval: TValue;
-    key, val, elem: TSciterValue;
-  begin
-    valfields := TRTTIContext.Create.GetType(rectype).GetFields;
-    for i := Low(valfields) to High(valfields) do
-    begin
-      API.ValueInit(@key);
-      API.ValueInit(@val);
-      API.ValueStringDataSet(@key, PWideChar(valfields[i].Name), Length(valfields[i].Name), UINT(UT_STRING_SYMBOL));
 
-      rval := valfields[i].GetValue(recobj);
+    procedure ProcessValue(rval: TValue; var val: TSciterValue);
+    var
+      j: Integer;
+      elem: TSciterValue;
+      aval: TValue;
+    begin
       if rval.Kind = tkInteger then
         API.ValueIntDataSet(@val, rval.AsInteger, T_INT, 0)
       else if rval.Kind = tkEnumeration then
       begin
-        if valfields[i].FieldType.Name = 'Boolean' then
+        if GetTypeName(rval.TypeInfo) = 'Boolean' then
         begin
           if rval.AsOrdinal = 1 then
             API.ValueIntDataSet(@val, 1, T_BOOL, 0)
@@ -1776,24 +1780,7 @@ var
         begin
           API.ValueInit(@elem);
           aval := rval.GetArrayElement(j);
-          if aval.Kind = tkInteger then
-            API.ValueIntDataSet(@elem, aval.AsInteger, T_INT, 0)
-          else if aval.Kind = tkEnumeration then
-          begin
-            if aval.AsBoolean then
-              API.ValueIntDataSet(@elem, 1, T_BOOL, 0)
-            else
-              API.ValueIntDataSet(@elem, 0, T_BOOL, 0)
-          end else if aval.Kind = tkUString then
-          begin
-            sWStr := aval.AsString;
-            API.ValueStringDataSet(@elem, PWideChar(sWStr), Length(sWStr), 0);
-          end else if aval.Kind = tkRecord then
-            ProcessRecord(@elem, aval.TypeInfo, aval.GetReferenceToRawData)
-          else if aval.Kind = tkVariant then
-            V2S(aval.AsVariant, @elem)
-          else
-            raise ESciterNotImplementedException.CreateFmt('Cannot convert array element of type %d to Sciter value.', [Integer(aval.Kind)]);
+          ProcessValue(aval, elem);
           API.ValueNthElementValueSet(@val, j, @elem);
           API.ValueClear(@elem);
         end;
@@ -1803,7 +1790,22 @@ var
         V2S(rval.AsVariant, @val)
       else
         raise ESciterNotImplementedException.CreateFmt('Cannot convert record field of type %d to Sciter value.', [Integer(rval.Kind)]);
+    end;
 
+  var
+    i, j: Integer;
+    valfields: TArray<TRttiField>;
+    rval: TValue;
+    key, val: TSciterValue;
+  begin
+    valfields := TRTTIContext.Create.GetType(rectype).GetFields;
+    for i := Low(valfields) to High(valfields) do
+    begin
+      API.ValueInit(@key);
+      API.ValueInit(@val);
+      API.ValueStringDataSet(@key, PWideChar(valfields[i].Name), Length(valfields[i].Name), UINT(UT_STRING_SYMBOL));
+      rval := valfields[i].GetValue(recobj);
+      ProcessValue(rval, val);
       Result := API.ValueSetValueToKey(sval, @key, @val);
       API.ValueClear(@key);
       API.ValueClear(@val);

@@ -1148,13 +1148,9 @@ var
 begin
   pElement := TObject(param) as TElement;
   if (str = nil) or (str_length = 0) then
-  begin
-    pElement.FAttrValue := '';
-  end
-    else
-  begin
+    pElement.FAttrValue := ''
+  else
     pElement.FAttrValue := WideString(str);
-  end;
 end;
 
 procedure StyleAttributeTextCallback(str: PWideChar; str_length: UINT; param: Pointer); stdcall;
@@ -1163,13 +1159,9 @@ var
 begin
   pElement := TObject(param) as TElement;
   if (str = nil) or (str_length = 0) then
-  begin
-    pElement.FStyleAttrValue := '';
-  end
-    else
-  begin
+    pElement.FStyleAttrValue := ''
+  else
     pElement.FStyleAttrValue := WideString(str);
-  end;
 end;
 
 function SelectorCallback(he: HELEMENT; Param: Pointer ): BOOL; stdcall;
@@ -2490,45 +2482,47 @@ var
   bHandled: BOOL;
   M: PMsg;
 begin
-  if not DesignMode then
+  if DesignMode then
   begin
-    case Message.Msg of
-      WM_SETFOCUS:
-        begin
-          if Assigned(FOnFocus) then
-            FOnFocus(Self);
-        end;
+    inherited WndProc(Message);
+    Exit;
+  end;
 
-      WM_GETDLGCODE:
-        // Tweaking arrow keys and TAB handling (VCL-specific)
+  case Message.Msg of
+    WM_SETFOCUS:
+      begin
+        if Assigned(FOnFocus) then
+          FOnFocus(Self);
+      end;
+
+    WM_GETDLGCODE:
+      // Tweaking arrow keys and TAB handling (VCL-specific)
+      begin
+        Message.Result := DLGC_WANTALLKEYS or DLGC_WANTARROWS or DLGC_WANTCHARS or DLGC_HASSETSEL;
+        if TabStop then
+          Message.Result := Message.Result or DLGC_WANTTAB;
+        if Message.lParam <> 0 then
         begin
-          Message.Result := DLGC_WANTALLKEYS or DLGC_WANTARROWS or DLGC_WANTCHARS or DLGC_HASSETSEL;
-          if TabStop then
-            Message.Result := Message.Result or DLGC_WANTTAB;
-          if Message.lParam <> 0 then
-          begin
-            M := PMsg(Message.lParam);
-            case M.Message of
-              WM_SYSKEYDOWN, WM_SYSKEYUP, WM_SYSCHAR,
-              WM_KEYDOWN, WM_KEYUP, WM_CHAR:
-              begin
-                Perform(M.message, M.wParam, M.lParam);
-                // Message.Result := Message.Result or DLGC_WANTMESSAGE or DLGC_WANTTAB;
-              end;
+          M := PMsg(Message.lParam);
+          case M.Message of
+            WM_SYSKEYDOWN, WM_SYSKEYUP, WM_SYSCHAR,
+            WM_KEYDOWN, WM_KEYUP, WM_CHAR:
+            begin
+              Perform(M.message, M.wParam, M.lParam);
+              // Message.Result := Message.Result or DLGC_WANTMESSAGE or DLGC_WANTTAB;
             end;
           end;
-          Exit;
         end;
-    end;
+        Exit;
+      end;
+  end;
 
-    if IsWindow(Handle) then
-      llResult := API.SciterProcND(Handle, Message.Msg, Message.WParam, Message.LParam, bHandled);
+  if IsWindow(Handle) then
+    llResult := API.SciterProcND(Handle, Message.Msg, Message.WParam, Message.LParam, bHandled);
 
-    if bHandled then
-      Message.Result := llResult
-    else
-      inherited WndProc(Message);
-  end else
+  if bHandled then
+    Message.Result := llResult
+  else
     inherited WndProc(Message);
 end;
 
@@ -2789,10 +2783,7 @@ begin
   Result := '';
   
   if AttrName = '' then
-  begin
-    Result := '';
     Exit;
-  end;
   
   sAttrName := AnsiString(AttrName);
   Self.FAttrName := AttrName;
