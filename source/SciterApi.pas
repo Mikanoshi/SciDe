@@ -326,6 +326,7 @@ type
     HANDLE_TISCRIPT_METHOD_CALL  = $0800,
     HANDLE_EXCHANGE              = $1000,
     HANDLE_GESTURE               = $2000,
+    HANDLE_SOM                   = $8000,
     HANDLE_ALL                   = $FFFF,
     SUBSCRIPTIONS_REQUEST        = -1,
     EVENT_GROUPS_DUMMY           = MAXINT
@@ -1120,8 +1121,8 @@ type
   TRecordVarData = packed record
     VType: TVarType;
     Reserved1, Reserved2, Reserved3: Word;
-    VRecord: TRecordData;
-    Reserved4: NativeInt;
+    RecObj: Pointer;
+    RecType: Pointer;
   end;
 
   TRecordVariantType = class(TCustomVariantType)
@@ -1217,6 +1218,8 @@ procedure ThrowError(const vm: HVM; const Message: WideString); overload;
 function GetNativeObjectJson(const Value: PSciterValue): WideString;
 function CallScriptFunction(Element: HELEMENT; const FuncName: AnsiString; Params: TArray<Variant>): SCDOM_RESULT; overload;
 function CallScriptFunction(Element: HELEMENT; const FuncName: AnsiString; Params: TArray<Variant>; var RetVal: TSciterValue): SCDOM_RESULT; overload;
+function CallScriptMethod(Element: HELEMENT; const FuncName: AnsiString; Params: TArray<Variant>): SCDOM_RESULT; overload;
+function CallScriptMethod(Element: HELEMENT; const FuncName: AnsiString; Params: TArray<Variant>; var RetVal: TSciterValue): SCDOM_RESULT; overload;
 
 var
   SCITER_DLL_DIR: String = '';
@@ -1238,30 +1241,36 @@ var
 
 procedure TRecordVariantType.Copy(var Dest: TVarData; const Source: TVarData; const Indirect: Boolean);
 begin
+  if Indirect and VarDataIsByRef(Source) then
+     VarDataCopyNoInd(Dest, Source)
+  else
   with TRecordVarData(Dest) do
   begin
     VType := VarType;
-    VRecord := TRecordData.Create;
-    VRecord.RecObj := TRecordVarData(Source).VRecord.RecObj;
-    VRecord.RecType := TRecordVarData(Source).VRecord.RecType;
+    RecObj := TRecordVarData(Source).RecObj;
+    RecType := TRecordVarData(Source).RecType;
   end;
 end;
 
 procedure TRecordVariantType.Clear(var V: TVarData);
 begin
   V.VType := varEmpty;
-  FreeAndNil(TRecordVarData(V).VRecord);
+  TRecordVarData(V).RecObj := nil;
+  TRecordVarData(V).RecType := nil;
 end;
 
 function TRecordVariantType.IsClear(const V: TVarData): Boolean;
 begin
-  Result := not Assigned(TRecordVarData(V).VRecord);
+  Result := not Assigned(TRecordVarData(V).RecObj);
 end;
 
 { TSymbolVariantType }
 
 procedure TSymbolVariantType.Copy(var Dest: TVarData; const Source: TVarData; const Indirect: Boolean);
 begin
+  if Indirect and VarDataIsByRef(Source) then
+     VarDataCopyNoInd(Dest, Source)
+  else
   with TSymbolVarData(Dest) do
   begin
     VType := VarType;
@@ -1323,6 +1332,33 @@ begin
   end;
 
   Result := API.SciterCallScriptingFunction(Element, PAnsiChar(FuncName), @SParams[0], Length(SParams), RetVal);
+
+  for I := Low(SParams) to High(SParams) do
+    API.ValueClear(@SParams[I]);
+end;
+
+function CallScriptMethod(Element: HELEMENT; const FuncName: AnsiString; Params: TArray<Variant>): SCDOM_RESULT;
+var
+  RetVal: TSciterValue;
+begin
+  API.ValueInit(@RetVal);
+  CallScriptMethod(Element, FuncName, Params, RetVal);
+  API.ValueClear(@RetVal);
+end;
+
+function CallScriptMethod(Element: HELEMENT; const FuncName: AnsiString; Params: TArray<Variant>; var RetVal: TSciterValue): SCDOM_RESULT;
+var
+  SParams: TArray<TSciterValue>;
+  I: Integer;
+begin
+  SetLength(SParams, Length(Params));
+  for I := Low(Params) to High(Params) do
+  begin
+    API.ValueInit(@SParams[I]);
+    V2S(Params[I], @SParams[I]);
+  end;
+
+  Result := API.SciterCallScriptingMethod(Element, PAnsiChar(FuncName), @SParams[0], Length(SParams), RetVal);
 
   for I := Low(SParams) to High(SParams) do
     API.ValueClear(@SParams[I]);
@@ -1748,6 +1784,7 @@ var
     procedure ProcessValue(rval: TValue; var val: TSciterValue);
     var
       j: Integer;
+      bytes: TBytes;
       elem: TSciterValue;
       aval: TValue;
     begin
@@ -1776,6 +1813,11 @@ var
         Result := API.ValueInt64DataSet(@val, i64, T_DATE, UINT(True));
       end else if (rval.Kind = tkArray) or (rval.Kind = tkDynArray) then
       begin
+        if GetTypeName(rval.TypeInfo) = 'TArray<System.Byte>' then
+        begin
+          bytes := rval.AsType<TBytes>;
+          API.ValueBinaryDataSet(@val, PByte(bytes), Length(bytes), T_BYTES, 0);
+        end else
         for j := 0 to rval.GetArrayLength - 1 do
         begin
           API.ValueInit(@elem);
@@ -1786,11 +1828,11 @@ var
         end;
       end else if rval.Kind = tkRecord then
         ProcessRecord(@val, rval.TypeInfo, rval.GetReferenceToRawData)
-      else if rval.Kind = tkVariant then
+      else if rval.Kind = tkVariant then
         V2S(rval.AsVariant, @val)
       else
         raise ESciterNotImplementedException.CreateFmt('Cannot convert record field of type %d to Sciter value.', [Integer(rval.Kind)]);
-    end;
+    end;
 
   var
     i, j: Integer;
@@ -1807,7 +1849,7 @@ var
       rval := valfields[i].GetValue(recobj);
       ProcessValue(rval, val);
       Result := API.ValueSetValueToKey(sval, @key, @val);
-      API.ValueClear(@key);
+      API.ValueClear(@key);
       API.ValueClear(@val);
     end;
   end;
@@ -1897,7 +1939,7 @@ begin
         Result := API.ValueStringDataSet(SciterValue, PWideChar(sWStr), Length(sWStr), UINT(UT_STRING_SYMBOL))
       end
     else if vt = varRecordEx then
-      ProcessRecord(SciterValue, TRecordVarData(Value).VRecord.RecType, TRecordVarData(Value).VRecord.RecObj)
+      ProcessRecord(SciterValue, TRecordVarData(Value).RecType, TRecordVarData(Value).RecObj)
     else
       raise ESciterNotImplementedException.CreateFmt('Cannot convert VARIANT of type %d to Sciter value.', [vt]);
   end;

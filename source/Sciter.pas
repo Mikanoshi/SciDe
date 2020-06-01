@@ -2531,9 +2531,8 @@ begin
   with TRecordVarData(Result) do
   begin
     VType := varRecordEx;
-    VRecord := TRecordData.Create;
-    VRecord.RecObj := @obj;
-    VRecord.RecType := TypeInfo(T);
+    RecObj := @Obj;
+    RecType := TypeInfo(T);
   end;
 end;
 
