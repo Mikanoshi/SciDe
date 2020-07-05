@@ -1132,7 +1132,7 @@ type
     function IsClear(const V: TVarData): Boolean; override;
   end;
 
-  TSymbolData = class(TPersistent)
+  TSymbolData = record
   public
     Symbol: String;
   end;
@@ -1274,7 +1274,6 @@ begin
   with TSymbolVarData(Dest) do
   begin
     VType := VarType;
-    VSymbol := TSymbolData.Create;
     VSymbol.Symbol := TSymbolVarData(Source).VSymbol.Symbol;
   end;
 end;
@@ -1282,12 +1281,12 @@ end;
 procedure TSymbolVariantType.Clear(var V: TVarData);
 begin
   V.VType := varEmpty;
-  FreeAndNil(TSymbolVarData(V).VSymbol);
+  TSymbolVarData(V).VSymbol.Symbol := '';
 end;
 
 function TSymbolVariantType.IsClear(const V: TVarData): Boolean;
 begin
-  Result := not Assigned(TSymbolVarData(V).VSymbol);
+  Result := TSymbolVarData(V).VSymbol.Symbol = '';
 end;
 
 function GetNativeObjectJson(const Value: PSciterValue): WideString;
@@ -1315,7 +1314,7 @@ var
   RetVal: TSciterValue;
 begin
   API.ValueInit(@RetVal);
-  CallScriptFunction(Element, FuncName, Params, RetVal);
+  Result := CallScriptFunction(Element, FuncName, Params, RetVal);
   API.ValueClear(@RetVal);
 end;
 
@@ -1342,7 +1341,7 @@ var
   RetVal: TSciterValue;
 begin
   API.ValueInit(@RetVal);
-  CallScriptMethod(Element, FuncName, Params, RetVal);
+  Result := CallScriptMethod(Element, FuncName, Params, RetVal);
   API.ValueClear(@RetVal);
 end;
 
@@ -1740,7 +1739,7 @@ begin
           case TSciterValueUnitTypeObject(pUnits) of
             UT_OBJECT_ARRAY, UT_OBJECT_OBJECT, UT_OBJECT_ERROR:
               begin
-                Result := API.ValueIsolate(Value);
+                API.ValueIsolate(Value);
                 Result := S2V(Value, OutValue);
                 Exit;
               end;
@@ -1835,7 +1834,7 @@ var
     end;
 
   var
-    i, j: Integer;
+    i: Integer;
     valfields: TArray<TRttiField>;
     rval: TValue;
     key, val: TSciterValue;
@@ -1858,7 +1857,7 @@ var
   pDisp: IDispatch;
   cCur: Currency;
   vt: Word;
-  i, j: Integer;
+  i: Integer;
   oArrItem: Variant;
   sArrItem: TSciterValue;
 begin

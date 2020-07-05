@@ -1997,6 +1997,7 @@ function TSciter.LoadPackedResource(const ResName: String; const ResType: PWideC
 var
   ResStream: TCustomMemoryStream;
 begin
+  Result := True;
   if PackedRes.ContainsKey(ResName) then
     Exit;
   ResStream := nil;
@@ -2007,6 +2008,7 @@ begin
     ResStream.Free;
   except
     ResStream.Free;
+    Result := False;
   end;
 end;
 
@@ -2157,14 +2159,9 @@ begin
     if ThrowIfExists then
       SciterError('Definition of native class "%s" is already in cache.', [ClassInfo.TypeName])
     else
-    begin
       Result := ClassBag.ResolveClass(VM, ClassInfo.TypeName);
-    end;
-  end
-    else
-  begin
+  end else
     Result := ClassBag.RegisterClassInfo(VM, ClassInfo);
-  end;
 end;
 
 function TSciter.RegisterNativeClass(const ClassDef: ptiscript_class_def; ThrowIfExists: Boolean; ReplaceClassDef: Boolean): tiscript_class;
@@ -2517,6 +2514,8 @@ begin
       end;
   end;
 
+  bHandled := False;
+  llResult := 0;
   if IsWindow(Handle) then
     llResult := API.SciterProcND(Handle, Message.Msg, Message.WParam, Message.LParam, bHandled);
 
@@ -2541,7 +2540,6 @@ begin
   with TSymbolVarData(Result) do
   begin
     VType := varSymbol;
-    VSymbol := TSymbolData.Create;
     VSymbol.Symbol := Symbol;
   end;
 end;
