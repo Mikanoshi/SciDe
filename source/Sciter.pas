@@ -1407,6 +1407,7 @@ begin
   evt.data := pVal;
   evt.he := he;
   evt.heTarget := he;
+  evt.name := nil;
   API.SciterFireEvent(evt, async, bHandled);
   API.ValueClear(@pVal);
 end;

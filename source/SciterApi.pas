@@ -556,6 +556,7 @@ type
           he: HELEMENT;
       reason: UINT_PTR;
         data: TSciterValue;
+        name: LPCWSTR;
   end;
   PBEHAVIOR_EVENT_PARAMS = ^BEHAVIOR_EVENT_PARAMS;
 
@@ -1224,8 +1225,10 @@ function CallScriptMethod(Element: HELEMENT; const FuncName: AnsiString; Params:
 var
   SCITER_DLL_DIR: String = '';
   SCITER_DLL_FILENAME: String = 'sciter.dll';
+  SCITER_DLL_SKIP_FREE: Boolean = False;
   varRecordEx: Word = 0;
   varSymbol: Word = 0;
+  HSCITER: HMODULE;
 
 implementation
 
@@ -1233,7 +1236,6 @@ var
   FAPI: PSciterApi;
   FRAPI: PSciterRApi;
   FNI: ptiscript_native_interface;
-  HSCITER: HMODULE;
   RecordVariantType: TRecordVariantType;
   SymbolVariantType: TSymbolVariantType;
 
@@ -1330,7 +1332,11 @@ begin
     V2S(Params[I], @SParams[I]);
   end;
 
-  Result := API.SciterCallScriptingFunction(Element, PAnsiChar(FuncName), @SParams[0], Length(SParams), RetVal);
+  try
+    Result := API.SciterCallScriptingFunction(Element, PAnsiChar(FuncName), @SParams[0], Length(SParams), RetVal);
+  except
+    OutputDebugString(PChar('Call failed: ' + FuncName));
+  end;
 
   for I := Low(SParams) to High(SParams) do
     API.ValueClear(@SParams[I]);
@@ -1357,7 +1363,11 @@ begin
     V2S(Params[I], @SParams[I]);
   end;
 
-  Result := API.SciterCallScriptingMethod(Element, PAnsiChar(FuncName), @SParams[0], Length(SParams), RetVal);
+  try
+    Result := API.SciterCallScriptingMethod(Element, PAnsiChar(FuncName), @SParams[0], Length(SParams), RetVal);
+  except
+    OutputDebugString(PChar('Call failed: ' + FuncName));
+  end;
 
   for I := Low(SParams) to High(SParams) do
     API.ValueClear(@SParams[I]);
@@ -2189,7 +2199,7 @@ initialization
 finalization
   FreeAndNil(RecordVariantType);
   FreeAndNil(SymbolVariantType);
-  if HSCITER <> 0 then
+  if (HSCITER <> 0) and not SCITER_DLL_SKIP_FREE then
     FreeLibrary(HSCITER);
 
 end.
