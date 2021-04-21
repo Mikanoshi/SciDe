@@ -91,6 +91,8 @@ type
 
   HELEMENT = Pointer;
 
+  HNODE = Pointer;
+
   HSARCHIVE = Pointer;
 
   LPVOID   = Pointer;
@@ -169,6 +171,12 @@ type
                                   // That UX theme is not using OS primitives for rendering input elements. Use it if you want exactly
                                   // the same (modulo fonts) look-n-feel on all platforms.
    SCITER_ALPHA_WINDOW  = 12,     // hWnd, value - TRUE/FALSE - window uses per pixel alpha (e.g. WS_EX_LAYERED/UpdateLayeredWindow() window)
+   SCITER_SET_INIT_SCRIPT = 13,   // hWnd - N/A , value LPCSTR - UTF-8 encoded script source to be loaded into each view before any other script execution.
+                                  //                             The engine copies this string inside the call.
+   SCITER_SET_MAIN_WINDOW = 14,   //  hWnd, value - TRUE/FALSE - window is main, will destroy all other dependent windows on close
+   SCITER_SET_MAX_HTTP_DATA_LENGTH = 15, // hWnd - N/A , value - max request length in megabytes (1024*1024 bytes)
+   SCITER_SET_PX_AS_DIP = 16, // value 1 - 1px in CSS is treated as 1dip, value 0 - default behavior - 1px is a physical pixel
+
    SCITER_RT_OPTIONS_DUMMY = MAXINT
   );
 
@@ -722,6 +730,8 @@ type
     SciterDWFactory: TProcPointer;
     SciterGraphicsCaps: function(var pcaps: UINT): BOOL; stdcall;
     SciterSetHomeURL: function(hWndSciter: HWINDOW; baseUrl: PWideChar): BOOL; stdcall;
+    SciterCreateNSView: TProcPointer;
+    SciterCreateWidget: TProcPointer;
     SciterCreateWindow: function(creationFlags: UINT; var frame: TRect; delegate: PSciterWindowDelegate; delegateParam: LPVOID; parent: HWINDOW): HWINDOW; stdcall;
     SciterSetupDebugOutput: procedure(hwndOrNull: HWINDOW; param: Pointer; pfOutput: PDEBUG_OUTPUT_PROC); stdcall;
 
@@ -858,12 +868,9 @@ type
     ValueNativeFunctorSet: function(Value: PSciterValue; pinvoke, prelease, tag: Pointer): UINT; stdcall;
     ValueIsNativeFunctor: TProcPointer;
 
-    // tiscript VM API
+    // Outdated, no longer exist:
     TIScriptAPI: function: ptiscript_native_interface; stdcall;
-
     SciterGetVM: function(h: HWND): HVM; stdcall;
-
-    // Sciter_v2V
     Sciter_T2S: function(vm: HVM; script_value: tiscript_value; var sciter_value: TSciterValue; isolate: BOOL): BOOL; stdcall;
     Sciter_S2T: function(vm: HVM; value: PSciterValue; var out_script_value: tiscript_value): BOOL; stdcall;
 
@@ -883,9 +890,22 @@ type
     SciterRenderOnDirectXWindow: function(hwnd: HWINDOW; elementToRenderOrNull: HELEMENT; frontLayer: BOOL): BOOL; stdcall;
     SciterRenderOnDirectXTexture: function(hwnd: HWINDOW; elementToRenderOrNull: HELEMENT; var surface: IUnknown): BOOL; stdcall; // IDXGISurface
 
+    SciterProcX: function(hwnd: HWINDOW; pMsg: Pointer): BOOL; stdcall;
+
     SciterAtomValue: function(name: PAnsiChar): UINT64; stdcall;
     SciterAtomNameCB: function(atomv: UINT64; rcv: PLPCSTR_RECEIVER; rcv_param: LPVOID): BOOL; stdcall;
     SciterSetGlobalAsset: function(pass: Pointer): BOOL; stdcall;
+
+    SciterGetElementAsset: function(el: HELEMENT; nameAtom: UINT64; var ppass: Pointer): SCDOM_RESULT; stdcall;
+
+    SciterSetVariable: function(hwndOrNull: HWINDOW; path: LPCWSTR; pvalToSet: PSciterValue): UINT; stdcall;
+    SciterGetVariable: function(hwndOrNull: HWINDOW; path: LPCWSTR; pvalToGet: PSciterValue): UINT; stdcall;
+
+    SciterElementUnwrap: function(pval: PSciterValue; var ppElement: HELEMENT): UINT; stdcall;
+    SciterElementWrap: function(pval: PSciterValue; pElement: HELEMENT): UINT; stdcall;
+
+    SciterNodeUnwrap: function(pval: PSciterValue; var ppNode: HNODE): UINT; stdcall;
+    SciterNodeWrap: function(pval: PSciterValue; pNode: HNODE): UINT; stdcall;
   end;
 
   PSciterApi = ^ISciterAPI;
@@ -1334,6 +1354,8 @@ begin
 
   try
     Result := API.SciterCallScriptingFunction(Element, PAnsiChar(FuncName), @SParams[0], Length(SParams), RetVal);
+    if not (Result = SCDOM_OK) then
+      OutputDebugString(PChar('Call failed: ' + FuncName + ', ' + IntToStr(Integer(Result))));
   except
     OutputDebugString(PChar('Call failed: ' + FuncName));
   end;
@@ -1365,6 +1387,8 @@ begin
 
   try
     Result := API.SciterCallScriptingMethod(Element, PAnsiChar(FuncName), @SParams[0], Length(SParams), RetVal);
+    if not (Result = SCDOM_OK) then
+      OutputDebugString(PChar('Call failed: ' + FuncName + ', ' + IntToStr(Integer(Result))));
   except
     OutputDebugString(PChar('Call failed: ' + FuncName));
   end;

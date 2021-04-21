@@ -1821,7 +1821,7 @@ begin
 
   wUrl := WideString(data.uri);
 
-  // Hadling res: URL scheme
+  // Handling res: URL scheme
   {$IFDEF UNICODE}
   if Pos(WideString('res:'), wUrl) = 1 then
   {$ELSE}
