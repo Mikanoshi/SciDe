@@ -7,7 +7,7 @@
 Sciter bindings for Delphi.
 
 Forked from [da-baranov/SciDe](https://github.com/da-baranov/SciDe).
-No longer updated, [Sciter 5.x version is here]([https://github.com/da-baranov/SciDe](https://github.com/Mikanoshi/SciDeJS)).
+No longer updated, [Sciter 5.x version is here](https://github.com/Mikanoshi/SciDeJS).
 
 ## Installation
 * Open project group file (.bpg or .groupproj) in Delphi IDE
